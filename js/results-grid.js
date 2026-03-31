@@ -136,8 +136,12 @@ const ResultsGrid = (() => {
       html += '<tr>';
       for (const col of _columns) {
         const val = row[col];
-        const { display, className, title } = _formatCell(val);
-        html += `<td class="${className}" title="${_esc(title)}">${display}</td>`;
+        const { display, className, title, isEmbed } = _formatCell(val);
+        if (isEmbed) {
+          html += `<td class="${className}" title="${_esc(title)}" data-embed-col="${_esc(col)}">${display}</td>`;
+        } else {
+          html += `<td class="${className}" title="${_esc(title)}">${display}</td>`;
+        }
       }
       html += '</tr>';
     }
@@ -158,6 +162,162 @@ const ResultsGrid = (() => {
         _renderTable();
       });
     });
+
+    // Bind embed cell clicks for expanding
+    _bindEmbedCells(container, sortedData);
+  }
+
+  function _bindEmbedCells(container, sortedData) {
+    const tbody = container.querySelector('.results-table tbody');
+    if (!tbody) return;
+
+    const rows = tbody.querySelectorAll(':scope > tr');
+    rows.forEach((tr, rowIdx) => {
+      tr.querySelectorAll('td.cell-expandable').forEach(td => {
+        td.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const colName = td.dataset.embedCol;
+          const rowData = sortedData[rowIdx];
+          if (!rowData) return;
+          const embedVal = rowData[colName];
+          if (embedVal === null || embedVal === undefined) return;
+
+          _toggleEmbedRow(td, tr, colName, embedVal);
+        });
+      });
+    });
+  }
+
+  function _toggleEmbedRow(td, parentTr, colName, embedVal) {
+    // Check if already expanded
+    const nextRow = parentTr.nextElementSibling;
+    if (nextRow && nextRow.classList.contains('embed-detail-row') && nextRow.dataset.embedCol === colName) {
+      nextRow.remove();
+      td.innerHTML = td.innerHTML.replace('▼', '▶');
+      td.classList.remove('expanded');
+      return;
+    }
+
+    // Collapse if same cell had a different expansion
+    if (nextRow && nextRow.classList.contains('embed-detail-row')) {
+      const prevCol = nextRow.dataset.embedCol;
+      nextRow.remove();
+      const prevTd = parentTr.querySelector(`td[data-embed-col="${prevCol}"]`);
+      if (prevTd) {
+        prevTd.innerHTML = prevTd.innerHTML.replace('▼', '▶');
+        prevTd.classList.remove('expanded');
+      }
+    }
+
+    // Expand
+    td.innerHTML = td.innerHTML.replace('▶', '▼');
+    td.classList.add('expanded');
+
+    const colSpan = parentTr.querySelectorAll('td').length;
+    const detailRow = document.createElement('tr');
+    detailRow.className = 'embed-detail-row';
+    detailRow.dataset.embedCol = colName;
+
+    const detailTd = document.createElement('td');
+    detailTd.colSpan = colSpan;
+    detailTd.className = 'embed-detail-cell';
+
+    const label = document.createElement('div');
+    label.className = 'embed-detail-label';
+    label.textContent = colName;
+    detailTd.appendChild(label);
+
+    if (Array.isArray(embedVal)) {
+      detailTd.appendChild(_buildEmbedTable(embedVal));
+    } else {
+      detailTd.appendChild(_buildEmbedObject(embedVal));
+    }
+
+    detailRow.appendChild(detailTd);
+    parentTr.after(detailRow);
+  }
+
+  function _buildEmbedTable(arr) {
+    if (arr.length === 0) {
+      const p = document.createElement('p');
+      p.className = 'embed-empty';
+      p.textContent = 'No rows';
+      return p;
+    }
+
+    const cols = Object.keys(arr[0]);
+    const wrapper = document.createElement('div');
+    wrapper.className = 'embed-table-wrapper';
+
+    const table = document.createElement('table');
+    table.className = 'results-table embed-table';
+
+    // Header
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    for (const col of cols) {
+      const th = document.createElement('th');
+      th.textContent = col;
+      headerRow.appendChild(th);
+    }
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    // Body
+    const tbody = document.createElement('tbody');
+    for (const row of arr) {
+      const tr = document.createElement('tr');
+      for (const col of cols) {
+        const val = row[col];
+        const td = document.createElement('td');
+        const { display, className, isEmbed } = _formatCell(val);
+        td.innerHTML = display;
+        td.className = className;
+        if (isEmbed) {
+          td.dataset.embedCol = col;
+          td.addEventListener('click', (e) => {
+            e.stopPropagation();
+            _toggleEmbedRow(td, tr, col, val);
+          });
+        }
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    wrapper.appendChild(table);
+    return wrapper;
+  }
+
+  function _buildEmbedObject(obj) {
+    const table = document.createElement('table');
+    table.className = 'results-table embed-table embed-object-table';
+
+    const tbody = document.createElement('tbody');
+    for (const [key, val] of Object.entries(obj)) {
+      const tr = document.createElement('tr');
+
+      const keyTd = document.createElement('td');
+      keyTd.className = 'embed-key';
+      keyTd.textContent = key;
+      tr.appendChild(keyTd);
+
+      const valTd = document.createElement('td');
+      const { display, className, isEmbed } = _formatCell(val);
+      valTd.innerHTML = display;
+      valTd.className = className;
+      if (isEmbed) {
+        valTd.dataset.embedCol = key;
+        valTd.addEventListener('click', (e) => {
+          e.stopPropagation();
+          _toggleEmbedRow(valTd, tr, key, val);
+        });
+      }
+      tr.appendChild(valTd);
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    return table;
   }
 
   function _formatCell(val) {
@@ -173,16 +333,18 @@ const ResultsGrid = (() => {
     if (typeof val === 'object') {
       if (Array.isArray(val)) {
         const count = val.length;
-        const json = JSON.stringify(val);
-        const summary = count === 0 ? '[]' : `[${count} row${count > 1 ? 's' : ''}]`;
-        return { display: _esc(summary), className: 'cell-embed', title: JSON.stringify(val, null, 2) };
+        if (count === 0) {
+          return { display: '[]', className: 'cell-embed', title: 'Empty array', isEmbed: false };
+        }
+        const summary = `▶ [${count} row${count > 1 ? 's' : ''}]`;
+        return { display: _esc(summary), className: 'cell-embed cell-expandable', title: 'Click to expand', isEmbed: true, embedData: val };
       }
-      const json = JSON.stringify(val);
       const keys = Object.keys(val);
-      const summary = keys.length <= 3
-        ? keys.map(k => `${k}: ${val[k] === null ? 'NULL' : val[k]}`).join(', ')
-        : json;
-      return { display: _esc(summary), className: 'cell-embed', title: JSON.stringify(val, null, 2) };
+      if (keys.length === 0) {
+        return { display: '{}', className: 'cell-embed', title: 'Empty object', isEmbed: false };
+      }
+      const summary = '▶ {' + keys.slice(0, 3).map(k => `${k}: ${val[k] === null ? 'NULL' : val[k]}`).join(', ') + (keys.length > 3 ? ', …' : '') + '}';
+      return { display: _esc(summary), className: 'cell-embed cell-expandable', title: 'Click to expand', isEmbed: true, embedData: val };
     }
     return { display: _esc(String(val)), className: 'cell-string', title: String(val) };
   }

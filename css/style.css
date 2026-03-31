@@ -729,9 +729,56 @@ input:focus, select:focus, textarea:focus {
 .cell-bool   { color: var(--keyword-color); }
 .cell-embed  {
   color: var(--accent);
-  cursor: help;
   font-style: italic;
   font-size: 0.9em;
+}
+.cell-expandable {
+  cursor: pointer;
+}
+.cell-expandable:hover {
+  text-decoration: underline;
+  filter: brightness(1.2);
+}
+.cell-expandable.expanded {
+  background: var(--bg-hover);
+}
+
+.embed-detail-row td.embed-detail-cell {
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-left: 3px solid var(--accent);
+}
+.embed-detail-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+.embed-table-wrapper {
+  max-height: 300px;
+  overflow: auto;
+  border-radius: 4px;
+}
+.embed-table {
+  font-size: 0.9em;
+}
+.embed-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.embed-object-table td.embed-key {
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  width: 1%;
+}
+.embed-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  margin: 4px 0;
 }
 
 /* ── PAGINATION ── */
