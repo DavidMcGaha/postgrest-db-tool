@@ -92,6 +92,7 @@ const QueryEditor = (() => {
     document.getElementById('qb-offset').value = '0';
     document.getElementById('qb-filters').innerHTML = '';
     document.getElementById('qb-orders').innerHTML = '';
+    document.getElementById('qb-embeds').innerHTML = '';
     document.getElementById('qb-fn-params').innerHTML = '';
     document.getElementById('qb-url-preview').textContent = '';
     document.getElementById('qb-resource-type').textContent = '';
@@ -141,6 +142,7 @@ const QueryEditor = (() => {
   function _bindButtons() {
     document.getElementById('btn-add-filter').addEventListener('click', () => _addFilterRow());
     document.getElementById('btn-add-order').addEventListener('click', () => _addOrderRow());
+    document.getElementById('btn-add-embed').addEventListener('click', () => _addEmbedRow());
     document.getElementById('btn-clear').addEventListener('click', () => {
       clear();
       ResultsGrid.clear();
@@ -164,12 +166,13 @@ const QueryEditor = (() => {
     const resource = SchemaBrowser.getResource(name);
     _currentResource = resource;
 
-    // Reset filters, orders, select, and pagination when switching resources
+    // Reset filters, orders, embeds, select, and pagination when switching resources
     document.getElementById('qb-select').value = '';
     document.getElementById('qb-limit').value = '25';
     document.getElementById('qb-offset').value = '0';
     document.getElementById('qb-filters').innerHTML = '';
     document.getElementById('qb-orders').innerHTML = '';
+    document.getElementById('qb-embeds').innerHTML = '';
     document.getElementById('qb-fn-params').innerHTML = '';
     ResultsGrid.clear();
 
@@ -195,12 +198,14 @@ const QueryEditor = (() => {
   function _showTableControls() {
     document.getElementById('qb-filters-section').style.display = '';
     document.getElementById('qb-order-section').style.display = '';
+    document.getElementById('qb-embeds-section').style.display = '';
     document.getElementById('qb-fn-params-section').style.display = 'none';
   }
 
   function _showFunctionControls(fn) {
     document.getElementById('qb-filters-section').style.display = 'none';
     document.getElementById('qb-order-section').style.display = 'none';
+    document.getElementById('qb-embeds-section').style.display = 'none';
     document.getElementById('qb-fn-params-section').style.display = '';
 
     const container = document.getElementById('qb-fn-params');
@@ -297,6 +302,67 @@ const QueryEditor = (() => {
     _updateUrlPreview();
   }
 
+  // ── Embed (Join) Rows ──
+
+  function _addEmbedRow() {
+    const container = document.getElementById('qb-embeds');
+    const row = document.createElement('div');
+    row.className = 'embed-row';
+
+    // Build resource options from all tables/views (excluding current resource)
+    const resources = SchemaBrowser.getAllResources().filter(r => r.type !== 'function');
+    let resOptions = '<option value="">related table…</option>';
+    for (const r of resources) {
+      if (_currentResource && r.name === _currentResource.name) continue;
+      const icon = r.type === 'table' ? '🗃️' : '👁️';
+      resOptions += `<option value="${r.name}">${icon} ${r.name}</option>`;
+    }
+
+    row.innerHTML = `
+      <div class="embed-row-main">
+        <select class="embed-resource" title="Related table/view">${resOptions}</select>
+        <select class="embed-join-type" title="Join type">
+          <option value="">left (default)</option>
+          <option value="!inner">inner</option>
+        </select>
+        <input class="embed-hint" type="text" placeholder="FK hint" title="Foreign key name for disambiguation, e.g. billing" spellcheck="false" style="width:100px">
+        <input class="embed-alias" type="text" placeholder="Alias" title="Alias for the embedded resource" spellcheck="false" style="width:90px">
+        <button class="btn-remove-row" title="Remove">×</button>
+      </div>
+      <div class="embed-row-detail">
+        <label>Columns</label>
+        <input class="embed-columns" type="text" placeholder="* (all columns)" title="Comma-separated columns from joined table" spellcheck="false">
+        <label>Filter</label>
+        <input class="embed-filter" type="text" placeholder="col=eq.val" title="Filter on the joined resource, e.g. status=eq.active" spellcheck="false">
+      </div>
+    `;
+
+    row.querySelector('.btn-remove-row').addEventListener('click', () => {
+      row.remove();
+      _updateUrlPreview();
+    });
+
+    const resSel = row.querySelector('.embed-resource');
+    resSel.addEventListener('change', () => {
+      const res = SchemaBrowser.getResource(resSel.value);
+      const colInput = row.querySelector('.embed-columns');
+      if (res && res.columns) {
+        colInput.placeholder = res.columns.map(c => c.name).join(', ');
+      } else {
+        colInput.placeholder = '* (all columns)';
+      }
+      _updateUrlPreview();
+    });
+
+    row.querySelectorAll('select, input').forEach(el => {
+      el.addEventListener('change', () => _updateUrlPreview());
+      el.addEventListener('input', () => _updateUrlPreview());
+    });
+
+    container.appendChild(row);
+    _updateUrlPreview();
+  }
+
   // ── Builder Input Binding ──
 
   function _bindBuilderInputs() {
@@ -345,7 +411,48 @@ const QueryEditor = (() => {
     const offset = document.getElementById('qb-offset').value.trim();
 
     const queryParams = {};
-    if (select && select !== '*') queryParams.select = select;
+
+    // Build embeds (joins) from embed rows
+    const embeds = [];
+    document.querySelectorAll('#qb-embeds .embed-row').forEach(row => {
+      const resName = row.querySelector('.embed-resource').value;
+      if (!resName) return;
+
+      const alias = row.querySelector('.embed-alias').value.trim();
+      const hint = row.querySelector('.embed-hint').value.trim();
+      const joinType = row.querySelector('.embed-join-type').value;
+      const cols = row.querySelector('.embed-columns').value.trim();
+      const filter = row.querySelector('.embed-filter').value.trim();
+
+      // Build: alias:table!hint!inner(col1,col2)
+      let embed = '';
+      if (alias) embed += alias + ':';
+      embed += resName;
+      if (hint) embed += '!' + hint;
+      if (joinType) embed += joinType;
+      embed += '(' + (cols || '*') + ')';
+      embeds.push(embed);
+
+      // Embed filter: col=op.val → add as table.col=op.val
+      if (filter) {
+        const eqIdx = filter.indexOf('=');
+        if (eqIdx > 0) {
+          const filterKey = (alias || resName) + '.' + filter.substring(0, eqIdx);
+          const filterVal = filter.substring(eqIdx + 1);
+          queryParams[filterKey] = filterVal;
+        }
+      }
+    });
+
+    // Assemble select param with embeds appended
+    let selectParam = select || '*';
+    if (embeds.length) {
+      selectParam = (select || '*') + ',' + embeds.join(',');
+    }
+    if (selectParam !== '*') {
+      queryParams.select = selectParam;
+    }
+
     if (limit) queryParams.limit = limit;
     if (offset && offset !== '0') queryParams.offset = offset;
 

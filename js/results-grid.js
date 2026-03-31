@@ -171,8 +171,18 @@ const ResultsGrid = (() => {
       return { display: String(val), className: 'cell-number', title: String(val) };
     }
     if (typeof val === 'object') {
+      if (Array.isArray(val)) {
+        const count = val.length;
+        const json = JSON.stringify(val);
+        const summary = count === 0 ? '[]' : `[${count} row${count > 1 ? 's' : ''}]`;
+        return { display: _esc(summary), className: 'cell-embed', title: JSON.stringify(val, null, 2) };
+      }
       const json = JSON.stringify(val);
-      return { display: _esc(json), className: 'cell-string', title: json };
+      const keys = Object.keys(val);
+      const summary = keys.length <= 3
+        ? keys.map(k => `${k}: ${val[k] === null ? 'NULL' : val[k]}`).join(', ')
+        : json;
+      return { display: _esc(summary), className: 'cell-embed', title: JSON.stringify(val, null, 2) };
     }
     return { display: _esc(String(val)), className: 'cell-string', title: String(val) };
   }

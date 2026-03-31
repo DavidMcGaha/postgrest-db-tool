@@ -419,6 +419,35 @@ input:focus, select:focus, textarea:focus {
 .filter-row select, .order-row select { width: auto; }
 .filter-row input { flex: 1; }
 
+.embed-row {
+  margin: 4px 0 4px 68px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px;
+  background: var(--bg-tertiary, var(--bg-secondary));
+}
+.embed-row-main {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.embed-row-main select { width: auto; }
+.embed-row-detail {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.embed-row-detail label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  min-width: auto;
+  padding: 0;
+}
+.embed-row-detail input { flex: 1; min-width: 80px; }
+
 .btn-remove-row {
   padding: 1px 6px;
   font-size: 14px;
@@ -698,6 +727,12 @@ input:focus, select:focus, textarea:focus {
 .cell-number { color: var(--number-color); }
 .cell-string { color: var(--string-color); }
 .cell-bool   { color: var(--keyword-color); }
+.cell-embed  {
+  color: var(--accent);
+  cursor: help;
+  font-style: italic;
+  font-size: 0.9em;
+}
 
 /* ── PAGINATION ── */
 .pagination {
