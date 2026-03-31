@@ -5,17 +5,64 @@
 const PostgRESTClient = (() => {
   let _baseUrl = '';
   let _jwt = '';
+  let _schema = '';  // Active schema (empty = server default)
   let _abortController = null;
 
   function configure(baseUrl, jwt) {
     _baseUrl = baseUrl.replace(/\/+$/, '');
     _jwt = jwt || '';
+    _schema = '';
+  }
+
+  function setSchema(schema) {
+    _schema = schema || '';
+  }
+
+  function getSchema() {
+    return _schema;
   }
 
   function _headers(extra) {
     const h = { 'Accept': 'application/json' };
     if (_jwt) h['Authorization'] = `Bearer ${_jwt}`;
+    // Schema selection via profile headers
+    if (_schema) {
+      h['Accept-Profile'] = _schema;
+      h['Content-Profile'] = _schema;
+    }
     return Object.assign(h, extra || {});
+  }
+
+  /**
+   * Probe the server for available schemas by sending an invalid Accept-Profile.
+   * PostgREST returns PGRST106 with the list of allowed schemas.
+   * Falls back to empty array if multi-schema is not configured.
+   */
+  async function detectSchemas() {
+    try {
+      const res = await fetch(_baseUrl + '/', {
+        headers: Object.assign(
+          { 'Accept': 'application/json' },
+          _jwt ? { 'Authorization': `Bearer ${_jwt}` } : {},
+          { 'Accept-Profile': '__invalid_schema_probe__' }
+        )
+      });
+      if (!res.ok) {
+        const body = await res.json();
+        // PGRST106: "The schema must be one of the following: s1, s2, s3"
+        if (body.code === 'PGRST106' && body.message) {
+          const match = body.message.match(/one of the following:\s*(.+)/i);
+          if (match) {
+            return match[1].split(',').map(s => s.trim()).filter(Boolean);
+          }
+        }
+      }
+      // If the request succeeds, the server accepts any profile (unlikely) or
+      // multi-schema is not configured — return empty to indicate single schema
+      return [];
+    } catch {
+      return [];
+    }
   }
 
   /**
@@ -198,5 +245,5 @@ const PostgRESTClient = (() => {
 
   function getBaseUrl() { return _baseUrl; }
 
-  return { configure, fetchSchema, executeQuery, callFunction, executeRaw, cancel, getBaseUrl };
+  return { configure, setSchema, getSchema, detectSchemas, fetchSchema, executeQuery, callFunction, executeRaw, cancel, getBaseUrl };
 })();

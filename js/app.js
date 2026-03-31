@@ -16,13 +16,17 @@ const App = (() => {
     _loadTheme();
 
     // ── Wire connection events ──
-    ConnectionManager.on('connect', ({ spec, elapsed, url }) => {
+    ConnectionManager.on('connect', async ({ spec, elapsed, url }) => {
       const schema = SchemaBrowser.loadSpec(spec);
       QueryEditor.populateResources();
       DetailPanel.clear();
       ResultsGrid.clear();
       document.getElementById('status-text').textContent =
         `Connected • ${schema.tables.length} tables, ${schema.views.length} views, ${schema.functions.length} functions • ${elapsed}ms`;
+
+      // Detect available schemas
+      const schemas = await PostgRESTClient.detectSchemas();
+      _populateSchemaSelector(schemas);
     });
 
     ConnectionManager.on('disconnect', () => {
@@ -31,6 +35,7 @@ const App = (() => {
       DetailPanel.clear();
       ResultsGrid.clear();
       document.getElementById('status-text').textContent = 'Disconnected';
+      document.getElementById('schema-select').classList.add('hidden');
     });
 
     ConnectionManager.on('error', ({ error }) => {
@@ -79,6 +84,11 @@ const App = (() => {
 
     // ── Resizable panels ──
     _initResizeHandles();
+
+    // ── Schema selector ──
+    document.getElementById('schema-select').addEventListener('change', (e) => {
+      _switchSchema(e.target.value);
+    });
   }
 
   async function executeQuery() {
@@ -161,6 +171,49 @@ const App = (() => {
 
   function cancelQuery() {
     PostgRESTClient.cancel();
+  }
+
+  // ── Schema Selector ──
+
+  function _populateSchemaSelector(schemas) {
+    const select = document.getElementById('schema-select');
+    if (!schemas || schemas.length === 0) {
+      select.classList.add('hidden');
+      return;
+    }
+
+    select.innerHTML = '';
+    for (const s of schemas) {
+      const opt = document.createElement('option');
+      opt.value = s;
+      opt.textContent = s;
+      select.appendChild(opt);
+    }
+    // Select current schema if set, otherwise first
+    const current = PostgRESTClient.getSchema();
+    if (current && schemas.includes(current)) {
+      select.value = current;
+    }
+    select.classList.remove('hidden');
+  }
+
+  async function _switchSchema(schemaName) {
+    PostgRESTClient.setSchema(schemaName);
+    document.getElementById('status-text').textContent = `Switching to schema "${schemaName}"…`;
+
+    try {
+      const { spec, elapsed } = await PostgRESTClient.fetchSchema();
+      const schema = SchemaBrowser.loadSpec(spec);
+      QueryEditor.populateResources();
+      QueryEditor.clear();
+      DetailPanel.clear();
+      ResultsGrid.clear();
+      document.getElementById('status-text').textContent =
+        `Schema: ${schemaName} • ${schema.tables.length} tables, ${schema.views.length} views, ${schema.functions.length} functions • ${elapsed}ms`;
+    } catch (err) {
+      ResultsGrid.showError(err);
+      document.getElementById('status-text').textContent = `Failed to switch schema: ${err.message}`;
+    }
   }
 
   // ── Timer ──
