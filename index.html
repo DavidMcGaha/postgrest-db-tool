@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PostgREST Explorer</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🐘</text></svg>">
+</head>
+<body>
+  <!-- ═══════════════════ HEADER ═══════════════════ -->
+  <header id="header">
+    <div class="header-brand">
+      <span class="header-logo">🐘</span>
+      <span class="header-title">PostgREST Explorer</span>
+    </div>
+    <div class="header-connection">
+      <label for="conn-url">URL</label>
+      <input id="conn-url" type="url" placeholder="http://localhost:3000" spellcheck="false">
+      <label for="conn-jwt">JWT</label>
+      <input id="conn-jwt" type="password" placeholder="Optional token" spellcheck="false">
+      <button id="btn-connect" class="btn btn-primary" title="Connect (Ctrl+Shift+C)">Connect</button>
+      <button id="btn-disconnect" class="btn btn-danger hidden" title="Disconnect">Disconnect</button>
+      <span id="conn-status" class="status-dot disconnected" title="Disconnected"></span>
+    </div>
+    <div class="header-actions">
+      <select id="saved-connections" title="Saved connections">
+        <option value="">— Saved —</option>
+      </select>
+      <button id="btn-save-conn" class="btn btn-small" title="Save current connection">💾</button>
+      <button id="btn-theme" class="btn btn-small" title="Toggle theme">☀️</button>
+    </div>
+  </header>
+
+  <!-- ═══════════════════ MAIN LAYOUT ═══════════════════ -->
+  <div id="app-layout">
+    <!-- LEFT SIDEBAR -->
+    <aside id="sidebar">
+      <div id="schema-browser" class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Schema Browser</span>
+          <input id="schema-search" type="search" placeholder="Filter…" class="search-input">
+        </div>
+        <div id="schema-tree" class="panel-body">
+          <p class="placeholder-text">Connect to a PostgREST server to browse schema.</p>
+        </div>
+      </div>
+
+      <div id="resize-handle-sidebar" class="resize-handle horizontal"></div>
+
+      <div id="detail-panel" class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Details</span>
+        </div>
+        <div id="detail-content" class="panel-body">
+          <p class="placeholder-text">Select a table, view, or function to see details.</p>
+        </div>
+      </div>
+    </aside>
+
+    <div id="resize-handle-main" class="resize-handle vertical"></div>
+
+    <!-- MAIN AREA -->
+    <main id="main-area">
+      <div id="query-editor" class="panel">
+        <div class="panel-header">
+          <div class="tab-bar">
+            <button class="tab active" data-tab="builder">URL Builder</button>
+            <button class="tab" data-tab="raw">Raw Request</button>
+          </div>
+          <div class="panel-actions">
+            <button id="btn-execute" class="btn btn-primary" title="Execute (Ctrl+Enter)">▶ Execute</button>
+            <button id="btn-cancel" class="btn btn-danger hidden" title="Cancel query">■ Cancel</button>
+            <button id="btn-clear" class="btn btn-small" title="Clear query">Clear</button>
+            <select id="query-history" title="Query history">
+              <option value="">— History —</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- URL BUILDER TAB -->
+        <div id="tab-builder" class="tab-content active">
+          <div class="builder-row">
+            <label>Resource</label>
+            <select id="qb-resource">
+              <option value="">Select table/view/function…</option>
+            </select>
+            <span id="qb-resource-type" class="badge"></span>
+          </div>
+          <div class="builder-row">
+            <label>Select</label>
+            <input id="qb-select" type="text" placeholder="* (all columns)" spellcheck="false">
+          </div>
+          <div class="builder-section" id="qb-filters-section">
+            <div class="builder-row">
+              <label>Filters</label>
+              <button id="btn-add-filter" class="btn btn-small">+ Add</button>
+            </div>
+            <div id="qb-filters"></div>
+          </div>
+          <div class="builder-section" id="qb-order-section">
+            <div class="builder-row">
+              <label>Order</label>
+              <button id="btn-add-order" class="btn btn-small">+ Add</button>
+            </div>
+            <div id="qb-orders"></div>
+          </div>
+          <div class="builder-row">
+            <label>Limit</label>
+            <input id="qb-limit" type="number" value="25" min="1" max="10000" style="width:80px">
+            <label>Offset</label>
+            <input id="qb-offset" type="number" value="0" min="0" style="width:80px">
+          </div>
+          <div class="builder-section" id="qb-fn-params-section" style="display:none">
+            <div class="builder-row">
+              <label>Function Parameters</label>
+            </div>
+            <div id="qb-fn-params"></div>
+          </div>
+          <div class="url-preview">
+            <label>Generated URL</label>
+            <code id="qb-url-preview"></code>
+          </div>
+        </div>
+
+        <!-- RAW REQUEST TAB -->
+        <div id="tab-raw" class="tab-content">
+          <div class="raw-request-bar">
+            <select id="raw-method">
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+            </select>
+            <input id="raw-path" type="text" placeholder="/tablename?select=col1,col2&col=eq.value" spellcheck="false" class="raw-path-input">
+          </div>
+          <textarea id="raw-body" placeholder="JSON body (for POST /rpc/… calls)" spellcheck="false" class="raw-body-input"></textarea>
+        </div>
+      </div>
+
+      <div id="resize-handle-query" class="resize-handle horizontal"></div>
+
+      <div id="results-panel" class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Results</span>
+          <div class="panel-actions">
+            <span id="result-info" class="result-info"></span>
+            <button id="btn-export-json" class="btn btn-small hidden" title="Copy as JSON">📋 JSON</button>
+            <button id="btn-export-csv" class="btn btn-small hidden" title="Download CSV">📥 CSV</button>
+          </div>
+        </div>
+        <div id="results-content" class="panel-body">
+          <p class="placeholder-text">Execute a query to see results.</p>
+        </div>
+        <div id="results-pagination" class="pagination hidden">
+          <button id="btn-prev-page" class="btn btn-small" disabled>◀ Prev</button>
+          <span id="page-info"></span>
+          <select id="page-size">
+            <option value="10">10 rows</option>
+            <option value="25" selected>25 rows</option>
+            <option value="50">50 rows</option>
+            <option value="100">100 rows</option>
+          </select>
+          <button id="btn-next-page" class="btn btn-small">Next ▶</button>
+        </div>
+        <div id="status-bar">
+          <span id="status-text">Ready</span>
+          <span id="elapsed-timer" class="elapsed-timer hidden"></span>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- SCRIPTS -->
+  <script src="js/postgrest-client.js"></script>
+  <script src="js/connection-manager.js"></script>
+  <script src="js/schema-browser.js"></script>
+  <script src="js/detail-panel.js"></script>
+  <script src="js/query-editor.js"></script>
+  <script src="js/results-grid.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
