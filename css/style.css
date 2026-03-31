@@ -666,6 +666,49 @@ input:focus, select:focus, textarea:focus {
   color: var(--accent);
 }
 
+/* ── FUNCTION DETAIL PANEL ── */
+.fn-detail-header {
+  padding: 6px 8px;
+}
+.fn-detail-name {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+.fn-detail-desc {
+  color: var(--text-secondary);
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+.fn-detail-sig {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.fn-detail-methods {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.fn-param-name {
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+.fn-param-required td {
+  border-left: 2px solid var(--accent);
+}
+.fn-param-default {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--string-color);
+}
+
 /* ── RESULTS TABLE ── */
 .results-table-wrapper {
   overflow: auto;

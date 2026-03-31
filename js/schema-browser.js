@@ -40,7 +40,9 @@ const SchemaBrowser = (() => {
                 type: pDef.type || pDef.format || 'unknown',
                 format: pDef.format || '',
                 description: pDef.description || '',
-                required: (p.schema.required || []).includes(pName)
+                required: (p.schema.required || []).includes(pName),
+                default: pDef.default !== undefined ? pDef.default : null,
+                enum: pDef.enum || null
               }));
             }
             return [{
@@ -48,7 +50,9 @@ const SchemaBrowser = (() => {
               type: p.type || 'json',
               format: p.format || '',
               description: p.description || '',
-              required: p.required || false
+              required: p.required || false,
+              default: p.default !== undefined ? p.default : null,
+              enum: p.enum || null
             }];
           })
           .flat();

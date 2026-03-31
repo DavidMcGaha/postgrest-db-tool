@@ -89,36 +89,61 @@ const DetailPanel = (() => {
 
   function _renderFunctionDetails(container, item) {
     const params = item.parameters || [];
-    let html = `<div style="padding:4px 8px">
-      <div style="font-weight:600;margin-bottom:4px">⚙️ ${item.name}</div>`;
+    let html = `<div class="fn-detail-header">
+      <div class="fn-detail-name">⚙️ ${_esc(item.name)}</div>`;
 
     if (item.description) {
-      html += `<div style="color:var(--text-secondary);font-size:11px;margin-bottom:6px">${_esc(item.description)}</div>`;
+      html += `<div class="fn-detail-desc">${_esc(item.description)}</div>`;
     }
 
+    // Call signature
+    const sig = params.map(p => {
+      let s = p.name + ': ' + p.type;
+      if (p.format) s += '(' + p.format + ')';
+      if (!p.required) s += '?';
+      return s;
+    }).join(', ');
+    html += `<div class="fn-detail-sig"><code>/rpc/${_esc(item.name)}(${_esc(sig)})</code></div>`;
+
+    html += `<div class="fn-detail-methods">HTTP Methods: ${(item.httpMethods || []).join(', ')}</div>`;
+    html += '</div>';
+
     if (!params.length) {
-      html += '<p class="placeholder-text">No parameters.</p>';
+      html += '<p class="placeholder-text">No parameters — call with empty body or GET.</p>';
     } else {
       html += `<table class="detail-table">
         <thead>
-          <tr><th>Parameter</th><th>Type</th><th>Required</th><th>Description</th></tr>
+          <tr>
+            <th></th>
+            <th>Parameter</th>
+            <th>Type</th>
+            <th>Req</th>
+            <th>Default</th>
+            <th>Description</th>
+          </tr>
         </thead>
         <tbody>`;
       for (const p of params) {
+        const reqIcon = p.required ? '✳️' : '';
+        const reqClass = p.required ? 'fn-param-required' : '';
+        const typeStr = p.format ? `${p.type} (${p.format})` : p.type;
+        const defaultVal = p.default !== undefined && p.default !== null ? String(p.default) : '';
+        let desc = p.description || '';
+        if (p.enum && p.enum.length) {
+          desc += (desc ? ' ' : '') + 'Values: ' + p.enum.join(', ');
+        }
         html += `
-          <tr>
-            <td>${p.name}</td>
-            <td class="col-type">${p.type}${p.format ? ` (${p.format})` : ''}</td>
+          <tr class="${reqClass}">
+            <td>${reqIcon}</td>
+            <td class="fn-param-name">${_esc(p.name)}</td>
+            <td class="col-type" title="${_esc(typeStr)}">${_esc(typeStr)}</td>
             <td>${p.required ? '✓' : ''}</td>
-            <td title="${_esc(p.description)}">${_esc(p.description)}</td>
+            <td class="fn-param-default">${_esc(defaultVal)}</td>
+            <td title="${_esc(desc)}">${_esc(desc)}</td>
           </tr>`;
       }
       html += '</tbody></table>';
     }
-
-    html += `<div style="margin-top:6px;font-size:10px;color:var(--text-muted)">
-      Methods: ${(item.httpMethods || []).join(', ')}
-    </div></div>`;
 
     container.innerHTML = html;
   }
