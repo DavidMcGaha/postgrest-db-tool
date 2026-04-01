@@ -20,6 +20,7 @@
       <label for="conn-jwt">JWT</label>
       <input id="conn-jwt" type="password" placeholder="Optional token" spellcheck="false">
       <button id="btn-connect" class="btn btn-primary" title="Connect (Ctrl+Shift+C)">Connect</button>
+      <button id="btn-demo" class="btn btn-small" title="Load demo data — no server required">🎭 Demo</button>
       <button id="btn-disconnect" class="btn btn-danger hidden" title="Disconnect">Disconnect</button>
       <select id="schema-select" class="hidden" title="Switch database schema">
         <option value="">Default schema</option>
@@ -70,6 +71,7 @@
           <div class="tab-bar">
             <button class="tab active" data-tab="builder">URL Builder</button>
             <button class="tab" data-tab="raw">Raw Request</button>
+            <button class="tab" data-tab="sql">SQL</button>
           </div>
           <div class="panel-actions">
             <button id="btn-execute" class="btn btn-primary" title="Execute (Ctrl+Enter)">▶ Execute</button>
@@ -144,6 +146,16 @@
           </div>
           <textarea id="raw-body" placeholder="JSON body (for POST /rpc/… calls)" spellcheck="false" class="raw-body-input"></textarea>
         </div>
+
+        <!-- SQL TAB -->
+        <div id="tab-sql" class="tab-content">
+          <div class="sql-tab-toolbar">
+            <button id="btn-apply-sql" class="btn btn-primary btn-small" title="Parse SQL and populate the URL Builder">← Apply to Builder</button>
+            <button id="btn-refresh-sql" class="btn btn-small" title="Re-generate SQL from the current URL Builder state">↻ Refresh</button>
+            <span class="sql-tab-hint">Edit SQL below, then click <strong>← Apply to Builder</strong> to update the builder.</span>
+          </div>
+          <textarea id="sql-editor" class="sql-editor-input" spellcheck="false" placeholder="Select a resource in the URL Builder tab, then switch here to see the equivalent SQL."></textarea>
+        </div>
       </div>
 
       <div id="resize-handle-query" class="resize-handle horizontal"></div>
@@ -180,7 +192,10 @@
   </div>
 
   <!-- SCRIPTS -->
+  <script src="js/demo-data.js"></script>
+  <script src="js/mock-server.js"></script>
   <script src="js/postgrest-client.js"></script>
+  <script src="js/sql-translator.js"></script>
   <script src="js/connection-manager.js"></script>
   <script src="js/schema-browser.js"></script>
   <script src="js/detail-panel.js"></script>

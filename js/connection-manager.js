@@ -97,6 +97,7 @@ const ConnectionManager = (() => {
 
   function _setUIConnected(connected) {
     document.getElementById('btn-connect').classList.toggle('hidden', connected);
+    document.getElementById('btn-demo').classList.toggle('hidden', connected);
     document.getElementById('btn-disconnect').classList.toggle('hidden', !connected);
     document.getElementById('btn-connect').disabled = false;
     document.getElementById('btn-connect').textContent = 'Connect';

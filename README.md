@@ -73,11 +73,26 @@ postgrest-db-tool/
     connection-manager.js Connection form, localStorage persistence
     schema-browser.js     Schema tree rendering
     detail-panel.js       Column/parameter detail view
-    query-editor.js       URL builder + raw request editor
+    query-editor.js       URL builder + raw request editor + SQL tab
     results-grid.js       Results table, pagination, export
+    sql-translator.js     URL Builder ↔ SQL translation logic
+    demo-data.js          Offline demo dataset (OpenAPI spec + mock rows)
+    mock-server.js        Fetch interceptor for demo mode
+  tests/
+    sql-translator.test.js  Unit tests for SqlTranslator (Node.js)
   img/icons.svg           SVG icon sprite
   README.md               This file
 ```
+
+## Testing
+
+The SQL translator has a self-contained test suite that requires only Node.js (no install needed):
+
+```bash
+node tests/sql-translator.test.js
+```
+
+125 tests cover `toSQL` (URL Builder → SQL) and `fromSQL` (SQL → URL Builder), including all 18 PostgREST filter operators, JOIN/embed handling, round-trips, and edge cases.
 
 ## Requirements
 

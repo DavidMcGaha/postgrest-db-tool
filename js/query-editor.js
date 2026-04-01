@@ -133,6 +133,9 @@ const QueryEditor = (() => {
         if (tabId === 'raw') {
           _syncBuilderToRaw();
         }
+        if (tabId === 'sql') {
+          _syncBuilderToSQL();
+        }
       });
     });
   }
@@ -147,6 +150,9 @@ const QueryEditor = (() => {
       clear();
       ResultsGrid.clear();
     });
+
+    document.getElementById('btn-apply-sql').addEventListener('click', () => _applySQL());
+    document.getElementById('btn-refresh-sql').addEventListener('click', () => _syncBuilderToSQL());
 
     document.getElementById('query-history').addEventListener('change', (e) => {
       if (e.target.value) {
@@ -551,7 +557,162 @@ const QueryEditor = (() => {
     document.getElementById('raw-body').value = req.body ? JSON.stringify(req.body, null, 2) : '';
   }
 
-  // ── History ──
+  // ── SQL Tab ──
+
+  function _getBuilderState() {
+    const resourceName = document.getElementById('qb-resource').value;
+    if (!resourceName) return null;
+
+    const resource = SchemaBrowser.getResource(resourceName);
+    const isFunction = resource && resource.type === 'function';
+
+    const state = {
+      resource:   resourceName,
+      select:     document.getElementById('qb-select').value.trim(),
+      filters:    [],
+      orders:     [],
+      embeds:     [],
+      limit:      document.getElementById('qb-limit').value.trim() || '25',
+      offset:     document.getElementById('qb-offset').value.trim() || '0',
+      isFunction
+    };
+
+    if (isFunction) {
+      const args = {};
+      document.querySelectorAll('#qb-fn-params .fn-param-row input').forEach(input => {
+        const val = input.value.trim();
+        if (val !== '') args[input.dataset.param] = val;
+      });
+      state.fnArgs = args;
+      return state;
+    }
+
+    document.querySelectorAll('#qb-filters .filter-row').forEach(row => {
+      const col = row.querySelector('.filter-col').value;
+      const op  = row.querySelector('.filter-op').value;
+      const val = row.querySelector('.filter-val').value;
+      if (col && op) state.filters.push({ col, op, val });
+    });
+
+    document.querySelectorAll('#qb-orders .order-row').forEach(row => {
+      const col = row.querySelector('.order-col').value;
+      const dir = row.querySelector('.order-dir').value;
+      if (col) state.orders.push({ col, dir });
+    });
+
+    document.querySelectorAll('#qb-embeds .embed-row').forEach(row => {
+      const res = row.querySelector('.embed-resource').value;
+      if (!res) return;
+      state.embeds.push({
+        resource: res,
+        alias:    row.querySelector('.embed-alias').value.trim(),
+        hint:     row.querySelector('.embed-hint').value.trim(),
+        joinType: row.querySelector('.embed-join-type').value,
+        columns:  row.querySelector('.embed-columns').value.trim(),
+        filter:   row.querySelector('.embed-filter').value.trim()
+      });
+    });
+
+    return state;
+  }
+
+  function _syncBuilderToSQL() {
+    const state = _getBuilderState();
+    const textarea = document.getElementById('sql-editor');
+    if (!state) {
+      textarea.value = '';
+      return;
+    }
+    try {
+      textarea.value = SqlTranslator.toSQL(state, SchemaBrowser.getSchema());
+    } catch (e) {
+      textarea.value = '-- Translation error: ' + e.message;
+    }
+  }
+
+  function _applySQL() {
+    const sql = document.getElementById('sql-editor').value.trim();
+    if (!sql) return;
+
+    let state;
+    try {
+      state = SqlTranslator.fromSQL(sql);
+    } catch (e) {
+      // Show error in status bar and bail
+      document.getElementById('status-text').textContent = 'SQL parse error: ' + e.message;
+      return;
+    }
+
+    if (!state.resource) {
+      document.getElementById('status-text').textContent = 'Could not determine table from SQL (missing FROM clause).';
+      return;
+    }
+
+    // Switch to builder tab first
+    document.querySelectorAll('.tab-bar .tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelector('[data-tab="builder"]').classList.add('active');
+    document.getElementById('tab-builder').classList.add('active');
+    _activeTab = 'builder';
+
+    // Set resource (triggers column population)
+    const resourceSelect = document.getElementById('qb-resource');
+    if (Array.from(resourceSelect.options).some(o => o.value === state.resource)) {
+      resourceSelect.value = state.resource;
+      _onResourceChange();
+    } else {
+      document.getElementById('status-text').textContent = `Table "${state.resource}" not found in schema.`;
+      return;
+    }
+
+    // Populate fields
+    document.getElementById('qb-select').value = state.select || '';
+    document.getElementById('qb-limit').value  = state.limit  || '25';
+    document.getElementById('qb-offset').value = state.offset || '0';
+
+    if (state.isFunction && state.fnArgs) {
+      Object.entries(state.fnArgs).forEach(([param, val]) => {
+        const input = document.querySelector(`#qb-fn-params input[data-param="${param}"]`);
+        if (input) input.value = val;
+      });
+    } else {
+      // Filters
+      document.getElementById('qb-filters').innerHTML = '';
+      for (const f of (state.filters || [])) {
+        _addFilterRow(f.col, f.op, f.val);
+      }
+
+      // Orders
+      document.getElementById('qb-orders').innerHTML = '';
+      for (const o of (state.orders || [])) {
+        _addOrderRow(o.col, o.dir);
+      }
+
+      // Embeds
+      document.getElementById('qb-embeds').innerHTML = '';
+      for (const e of (state.embeds || [])) {
+        _addEmbedRow();
+        const rows = document.querySelectorAll('#qb-embeds .embed-row');
+        const last = rows[rows.length - 1];
+        if (!last) continue;
+        const resSel = last.querySelector('.embed-resource');
+        if (Array.from(resSel.options).some(o => o.value === e.resource)) {
+          resSel.value = e.resource;
+          resSel.dispatchEvent(new Event('change'));
+        }
+        last.querySelector('.embed-alias').value    = e.alias    || '';
+        last.querySelector('.embed-hint').value     = e.hint     || '';
+        last.querySelector('.embed-join-type').value = e.joinType || '';
+        last.querySelector('.embed-columns').value  = e.columns  || '';
+        last.querySelector('.embed-filter').value   = e.filter   || '';
+      }
+    }
+
+    _updateUrlPreview();
+    document.getElementById('status-text').textContent = 'SQL applied to builder.';
+  }
+
+
 
   function saveToHistory(request) {
     const history = _getHistory();

@@ -64,6 +64,13 @@ const App = (() => {
     // ── Wire theme toggle ──
     document.getElementById('btn-theme').addEventListener('click', _toggleTheme);
 
+    // ── Wire demo button ──
+    document.getElementById('btn-demo').addEventListener('click', () => {
+      document.getElementById('conn-url').value = DEMO_BASE_URL;
+      document.getElementById('conn-jwt').value = '';
+      document.getElementById('btn-connect').click();
+    });
+
     // ── Global keyboard shortcuts ──
     document.addEventListener('keydown', (e) => {
       // Ctrl+Enter or Cmd+Enter → Execute
