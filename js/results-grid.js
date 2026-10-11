@@ -13,18 +13,39 @@ const ResultsGrid = (() => {
 
   function init() {
     document.getElementById('page-size').addEventListener('change', (e) => {
-      _pageSize = parseInt(e.target.value, 10);
-      // Re-execute with new page size
+      const pageSize = parseInt(e.target.value, 10);
+      if (!Number.isFinite(pageSize) || pageSize < 1) return;
+      if (typeof QueryEditor !== 'undefined') {
+        QueryEditor.setPagination(pageSize, 0);
+      } else {
+        _pageSize = pageSize;
+        _currentOffset = 0;
+      }
       if (typeof App !== 'undefined') App.executeQuery();
     });
 
     document.getElementById('btn-prev-page').addEventListener('click', () => {
-      _currentOffset = Math.max(0, _currentOffset - _pageSize);
+      const { limit, offset } = typeof QueryEditor !== 'undefined'
+        ? QueryEditor.getPagination()
+        : { limit: _pageSize, offset: _currentOffset };
+      const newOffset = Math.max(0, offset - limit);
+      if (typeof QueryEditor !== 'undefined') {
+        QueryEditor.setPagination(limit, newOffset);
+      } else {
+        _currentOffset = newOffset;
+      }
       if (typeof App !== 'undefined') App.executeQuery();
     });
 
     document.getElementById('btn-next-page').addEventListener('click', () => {
-      _currentOffset += _pageSize;
+      const { limit, offset } = typeof QueryEditor !== 'undefined'
+        ? QueryEditor.getPagination()
+        : { limit: _pageSize, offset: _currentOffset };
+      if (typeof QueryEditor !== 'undefined') {
+        QueryEditor.setPagination(limit, offset + limit);
+      } else {
+        _currentOffset = offset + limit;
+      }
       if (typeof App !== 'undefined') App.executeQuery();
     });
 
@@ -35,6 +56,18 @@ const ResultsGrid = (() => {
   function getPageSize() { return _pageSize; }
   function getOffset() { return _currentOffset; }
   function setOffset(val) { _currentOffset = val; }
+
+  /** Align results pagination with URL Builder limit/offset before/after execute. */
+  function syncFromQueryParams(queryParams) {
+    const limit = parseInt(queryParams.limit || '25', 10);
+    const offset = parseInt(queryParams.offset || '0', 10);
+    _pageSize = Number.isFinite(limit) && limit > 0 ? limit : 25;
+    _currentOffset = Number.isFinite(offset) && offset >= 0 ? offset : 0;
+
+    const pageSizeEl = document.getElementById('page-size');
+    const opt = pageSizeEl.querySelector(`option[value="${_pageSize}"]`);
+    if (opt) pageSizeEl.value = String(_pageSize);
+  }
 
   /**
    * Display query results.
@@ -453,5 +486,8 @@ const ResultsGrid = (() => {
     return d.innerHTML;
   }
 
-  return { init, showResults, showError, showLoading, clear, getPageSize, getOffset, setOffset };
+  return {
+    init, showResults, showError, showLoading, clear,
+    getPageSize, getOffset, setOffset, syncFromQueryParams
+  };
 })();

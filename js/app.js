@@ -114,13 +114,9 @@ const App = (() => {
     _startTimer();
     _setQueryRunning(true);
 
-    // Update limit/offset from pagination state
-    if (!request.isRaw) {
-      if (!request.queryParams) request.queryParams = {};
-      request.queryParams.limit = String(ResultsGrid.getPageSize());
-      const offset = ResultsGrid.getOffset();
-      if (offset > 0) request.queryParams.offset = String(offset);
-      else delete request.queryParams.offset;
+    // Keep URL Builder limit/offset as the source of truth (sync results pagination UI)
+    if (!request.isRaw && request.queryParams) {
+      ResultsGrid.syncFromQueryParams(request.queryParams);
     }
 
     try {
@@ -132,26 +128,20 @@ const App = (() => {
           request.body
         );
       } else if (request.path.startsWith('/rpc/')) {
-        const fnName = request.path.replace('/rpc/', '');
-        result = await PostgRESTClient.callFunction(
-          fnName,
-          request.body,
-          request.method
-        );
-        // Apply limit/offset via query params for function result sets
+        let path = request.path;
         if (request.queryParams) {
-          const qs = Object.entries(request.queryParams)
-            .filter(([, v]) => v)
-            .map(([k, v]) => `${k}=${v}`)
-            .join('&');
-          if (qs) {
-            result = await PostgRESTClient.executeRaw(
-              request.method,
-              request.path + '?' + qs,
-              request.body ? JSON.stringify(request.body) : null
-            );
+          const params = new URLSearchParams();
+          for (const [k, v] of Object.entries(request.queryParams)) {
+            if (v !== '' && v !== undefined && v !== null) params.set(k, v);
           }
+          const qs = params.toString();
+          if (qs) path += '?' + qs;
         }
+        result = await PostgRESTClient.executeRaw(
+          request.method,
+          path,
+          request.body ? JSON.stringify(request.body) : null
+        );
       } else {
         result = await PostgRESTClient.executeQuery(
           request.path,

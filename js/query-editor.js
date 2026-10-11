@@ -41,7 +41,6 @@ const QueryEditor = (() => {
   // ── Public API ──
 
   function setResource(item) {
-    _currentResource = item;
     const select = document.getElementById('qb-resource');
 
     // Ensure the resource is in the dropdown
@@ -112,10 +111,36 @@ const QueryEditor = (() => {
     if (_activeTab === 'raw') {
       return _buildRawRequest();
     }
+    if (_activeTab === 'sql') {
+      const sql = document.getElementById('sql-editor').value.trim();
+      if (sql) {
+        try {
+          const ok = _applySQLState(SqlTranslator.fromSQL(sql), { switchTab: false });
+          if (!ok) return null;
+        } catch {
+          return null;
+        }
+      }
+    }
     return _buildFromBuilder();
   }
 
   function getActiveTab() { return _activeTab; }
+
+  function getPagination() {
+    const limit = parseInt(document.getElementById('qb-limit').value.trim() || '25', 10);
+    const offset = parseInt(document.getElementById('qb-offset').value.trim() || '0', 10);
+    return {
+      limit: Number.isFinite(limit) && limit > 0 ? limit : 25,
+      offset: Number.isFinite(offset) && offset >= 0 ? offset : 0
+    };
+  }
+
+  function setPagination(limit, offset) {
+    document.getElementById('qb-limit').value = String(limit);
+    document.getElementById('qb-offset').value = String(offset);
+    _updateUrlPreview();
+  }
 
   // ── Tab Switching ──
 
@@ -170,17 +195,21 @@ const QueryEditor = (() => {
   function _onResourceChange() {
     const name = document.getElementById('qb-resource').value;
     const resource = SchemaBrowser.getResource(name);
+    const prevName = _currentResource?.name;
     _currentResource = resource;
+    const switchedResource = name !== prevName;
 
-    // Reset filters, orders, embeds, select, and pagination when switching resources
-    document.getElementById('qb-select').value = '';
-    document.getElementById('qb-limit').value = '25';
-    document.getElementById('qb-offset').value = '0';
-    document.getElementById('qb-filters').innerHTML = '';
-    document.getElementById('qb-orders').innerHTML = '';
-    document.getElementById('qb-embeds').innerHTML = '';
-    document.getElementById('qb-fn-params').innerHTML = '';
-    ResultsGrid.clear();
+    // Reset builder only when the selected resource actually changes
+    if (switchedResource) {
+      document.getElementById('qb-select').value = '';
+      document.getElementById('qb-limit').value = '25';
+      document.getElementById('qb-offset').value = '0';
+      document.getElementById('qb-filters').innerHTML = '';
+      document.getElementById('qb-orders').innerHTML = '';
+      document.getElementById('qb-embeds').innerHTML = '';
+      document.getElementById('qb-fn-params').innerHTML = '';
+      ResultsGrid.clear();
+    }
 
     const badge = document.getElementById('qb-resource-type');
     if (resource) {
@@ -373,7 +402,16 @@ const QueryEditor = (() => {
 
   function _bindBuilderInputs() {
     ['qb-select', 'qb-limit', 'qb-offset'].forEach(id => {
-      document.getElementById(id).addEventListener('input', () => _updateUrlPreview());
+      document.getElementById(id).addEventListener('input', () => {
+        _updateUrlPreview();
+        if (id === 'qb-limit' || id === 'qb-offset') {
+          const limit = document.getElementById('qb-limit').value.trim() || '25';
+          const offset = document.getElementById('qb-offset').value.trim() || '0';
+          if (typeof ResultsGrid !== 'undefined') {
+            ResultsGrid.syncFromQueryParams({ limit, offset });
+          }
+        }
+      });
     });
   }
 
@@ -638,7 +676,6 @@ const QueryEditor = (() => {
     try {
       state = SqlTranslator.fromSQL(sql);
     } catch (e) {
-      // Show error in status bar and bail
       document.getElementById('status-text').textContent = 'SQL parse error: ' + e.message;
       return;
     }
@@ -648,24 +685,38 @@ const QueryEditor = (() => {
       return;
     }
 
-    // Switch to builder tab first
     document.querySelectorAll('.tab-bar .tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
     document.querySelector('[data-tab="builder"]').classList.add('active');
     document.getElementById('tab-builder').classList.add('active');
     _activeTab = 'builder';
 
-    // Set resource (triggers column population)
+    _applySQLState(state, { switchTab: false });
+    document.getElementById('status-text').textContent = 'SQL applied to builder.';
+  }
+
+  /**
+   * Apply parsed SQL state to the URL Builder fields.
+   * @param {Object} state - from SqlTranslator.fromSQL
+   * @param {{ switchTab?: boolean }} opts
+   */
+  function _applySQLState(state, opts = {}) {
     const resourceSelect = document.getElementById('qb-resource');
-    if (Array.from(resourceSelect.options).some(o => o.value === state.resource)) {
-      resourceSelect.value = state.resource;
-      _onResourceChange();
-    } else {
-      document.getElementById('status-text').textContent = `Table "${state.resource}" not found in schema.`;
-      return;
+    if (!Array.from(resourceSelect.options).some(o => o.value === state.resource)) {
+      if (opts.switchTab !== false) {
+        document.getElementById('status-text').textContent = `Table "${state.resource}" not found in schema.`;
+      }
+      return false;
     }
 
-    // Populate fields
+    const prevName = _currentResource?.name;
+    resourceSelect.value = state.resource;
+    if (state.resource !== prevName) {
+      _onResourceChange();
+    } else {
+      _currentResource = SchemaBrowser.getResource(state.resource);
+    }
+
     document.getElementById('qb-select').value = state.select || '';
     document.getElementById('qb-limit').value  = state.limit  || '25';
     document.getElementById('qb-offset').value = state.offset || '0';
@@ -676,19 +727,16 @@ const QueryEditor = (() => {
         if (input) input.value = val;
       });
     } else {
-      // Filters
       document.getElementById('qb-filters').innerHTML = '';
       for (const f of (state.filters || [])) {
         _addFilterRow(f.col, f.op, f.val);
       }
 
-      // Orders
       document.getElementById('qb-orders').innerHTML = '';
       for (const o of (state.orders || [])) {
         _addOrderRow(o.col, o.dir);
       }
 
-      // Embeds
       document.getElementById('qb-embeds').innerHTML = '';
       for (const e of (state.embeds || [])) {
         _addEmbedRow();
@@ -709,7 +757,13 @@ const QueryEditor = (() => {
     }
 
     _updateUrlPreview();
-    document.getElementById('status-text').textContent = 'SQL applied to builder.';
+    if (typeof ResultsGrid !== 'undefined') {
+      ResultsGrid.syncFromQueryParams({
+        limit: state.limit || '25',
+        offset: state.offset || '0'
+      });
+    }
+    return true;
   }
 
 
@@ -773,5 +827,8 @@ const QueryEditor = (() => {
     _activeTab = 'raw';
   }
 
-  return { init, setResource, populateResources, addColumnToSelect, clear, buildRequest, getActiveTab, saveToHistory };
+  return {
+    init, setResource, populateResources, addColumnToSelect, clear,
+    buildRequest, getActiveTab, getPagination, setPagination, saveToHistory
+  };
 })();
